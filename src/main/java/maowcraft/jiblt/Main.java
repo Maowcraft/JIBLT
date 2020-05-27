@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+@SuppressWarnings("ResultOfMethodCallIgnored")
 public class Main {
     public static void main(String[] args) {
         if (!Files.exists(Paths.get("config.json"))) {
@@ -32,11 +33,11 @@ public class Main {
                     BufferedImage topLayer = ImageIO.read(newTopLayer.toFile());
 
                     List<File> files = new ArrayList<>();
-                    getAllFiles(activeMainLayer.toFile(), files);
+                    getAllFiles(activeMainLayer.toFile().getAbsoluteFile(), files);
 
                     for (File file : files) {
                         BufferedImage mainLayer = ImageIO.read(file);
-                        drawPrerequisite(mainLayer, topLayer, args, file);
+                        drawPrerequisite(mainLayer, topLayer, args, file.getAbsoluteFile());
                     }
                 } catch (IOException ex) {
                     ex.printStackTrace();
@@ -53,12 +54,12 @@ public class Main {
 
     private static void getAllFiles(File dir, List<File> files) {
         File[] fList = dir.listFiles();
-        if(fList != null) {
+        if (fList != null) {
             for (File file : fList) {
                 if (file.isFile()) {
-                    files.add(file);
+                    files.add(file.getAbsoluteFile());
                 } else if (file.isDirectory()) {
-                    getAllFiles(file, files);
+                    getAllFiles(file.getAbsoluteFile(), files);
                 }
             }
         }
@@ -67,9 +68,9 @@ public class Main {
     private static void drawPrerequisite(BufferedImage mainLayer, BufferedImage topLayer, String[] args, File file) {
         if (mainLayer != null) {
             if (args[0].equals("addabove")) {
-                draw(Paths.get(file.getPath()), mainLayer, topLayer);
+                draw(Paths.get(file.getAbsolutePath()), mainLayer, topLayer);
             } else {
-                draw(Paths.get(file.getPath()), topLayer, mainLayer);
+                draw(Paths.get(file.getAbsolutePath()), topLayer, mainLayer);
             }
         }
     }
@@ -87,18 +88,16 @@ public class Main {
         }
     }
 
-    @SuppressWarnings("ResultOfMethodCallIgnored")
     private static void write(Path filePath, BufferedImage image) throws IOException {
         Path images = Paths.get("input");
         if (!Files.exists(images)) {
             Files.createDirectory(images);
         }
         for (File ignored : Objects.requireNonNull(images.toFile().listFiles())) {
-            File outputFile = new File("output/" + filePath.toFile().getName());
+            System.out.println("output/" + filePath.getParent().toFile().getName() + "/" + filePath.toFile().getName());
+            File outputFile = new File("output/" + filePath.getParent().toFile().getName() + "/" + filePath.toFile().getName());
             if (!outputFile.exists()) {
-                if (!outputFile.getParentFile().exists()) {
-                    outputFile.getParentFile().mkdirs();
-                }
+                outputFile.getParentFile().mkdirs();
                 outputFile.createNewFile();
             }
             ImageIO.write(image, "png", outputFile);
