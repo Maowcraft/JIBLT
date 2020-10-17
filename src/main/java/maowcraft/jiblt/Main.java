@@ -1,9 +1,8 @@
 package maowcraft.jiblt;
 
-import maowcraft.jiblt.util.ConfigUtils;
+import maowcraft.jiblt.util.ImageWithName;
 
 import javax.imageio.ImageIO;
-import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -11,96 +10,57 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
-@SuppressWarnings("ResultOfMethodCallIgnored")
 public class Main {
+    public static Path TOP_LAYER;
+    public static Path BOTTOM_LAYERS;
+    public static Path OUTPUT;
+
     public static void main(String[] args) {
-        if (!Files.exists(Paths.get("config.json"))) {
-            try {
-                Files.createFile(Paths.get("config.json"));
-            } catch (IOException e) {
-                e.printStackTrace();
+        if (args.length > 2) {
+            TOP_LAYER = Paths.get(args[0]);
+            BOTTOM_LAYERS = Paths.get(args[1]);
+            OUTPUT = Paths.get(args[2]);
+
+            if (Files.notExists(TOP_LAYER) || Files.notExists(BOTTOM_LAYERS) || Files.notExists(OUTPUT)) {
+                System.err.println("A specified path could not be found.");
+                return;
             }
-        }
-        if (args[0].length() > 0 && args[1].length() > 0) {
-            if (args[0].equals("addabove") || args[0].equals("addbelow")) {
-                try {
-                    ConfigUtils.readConfigFile(Paths.get("config.json"));
-                    Path activeMainLayer = ConfigUtils.getActiveMainLayer();
-                    Path newTopLayer = Paths.get(args[1]);
-                    BufferedImage topLayer = ImageIO.read(newTopLayer.toFile());
 
-                    List<File> files = new ArrayList<>();
-                    getAllFiles(activeMainLayer.toFile().getAbsoluteFile(), files);
+            ThreadGroup threadGroup = new ThreadGroup("jiblt");
+            int totalProcessors = Runtime.getRuntime().availableProcessors();
+            int maxThreads = 4;
 
-                    for (File file : files) {
-                        BufferedImage mainLayer = ImageIO.read(file);
-                        drawPrerequisite(mainLayer, topLayer, args, file.getAbsoluteFile());
-                    }
-                } catch (IOException ex) {
-                    ex.printStackTrace();
+            List<File> layerFiles = new ArrayList<>(Arrays.asList(Objects.requireNonNull(BOTTOM_LAYERS.toFile().listFiles())));
+
+            List<ImageWithName> images = new ArrayList<>();
+            for (File file : layerFiles) images.add(new ImageWithName(read(file), file.getName()));
+
+            List<ImageLayerer> layerers = new ArrayList<>();
+            for (int i = 0; i < maxThreads; i++) layerers.add(new ImageLayerer("Image Layerer " + i, threadGroup, read(TOP_LAYER.toFile()), images));
+
+            for (int i = 0; i < layerers.size(); i++) {
+                if (threadGroup.activeCount() < totalProcessors) {
+                    ImageLayerer layerer = layerers.get(i);
+                    layerer.start();
+                    i++;
                 }
-            } else if (args[0].equals("setmainlayer")) {
-                ConfigUtils.setActiveMainLayer(new File(args[1]));
-                ConfigUtils.writeConfigFile(args[1], Paths.get("config.json"));
-                System.out.println("Main layer set to " + ConfigUtils.getActiveMainLayer());
             }
         } else {
-            System.out.println("Missing arguments!");
+            System.err.println("Missing arguments.\nSyntax: program.jar <top layer(s)> <bottom layer> <output path>");
         }
     }
 
-    private static void getAllFiles(File dir, List<File> files) {
-        File[] fList = dir.listFiles();
-        if (fList != null) {
-            for (File file : fList) {
-                if (file.isFile()) {
-                    files.add(file.getAbsoluteFile());
-                } else if (file.isDirectory()) {
-                    getAllFiles(file.getAbsoluteFile(), files);
-                }
-            }
-        }
-    }
-
-    private static void drawPrerequisite(BufferedImage mainLayer, BufferedImage topLayer, String[] args, File file) {
-        if (mainLayer != null) {
-            if (args[0].equals("addabove")) {
-                draw(Paths.get(file.getAbsolutePath()), mainLayer, topLayer);
-            } else {
-                draw(Paths.get(file.getAbsolutePath()), topLayer, mainLayer);
-            }
-        }
-    }
-
-    private static void draw(Path filePath, BufferedImage bottomLayer, BufferedImage topLayer) {
-        final BufferedImage newImage = new BufferedImage(bottomLayer.getWidth(), bottomLayer.getHeight(), BufferedImage.TYPE_INT_ARGB);
-        final Graphics graphics = newImage.getGraphics();
-
-        graphics.drawImage(bottomLayer, 0, 0, null);
-        graphics.drawImage(topLayer, 0, 0, null);
+    private static BufferedImage read(File file)  {
+        BufferedImage image = null;
         try {
-            write(filePath, newImage);
-        } catch (IOException ex) {
-            ex.printStackTrace();
+            image = ImageIO.read(file);
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-    }
-
-    private static void write(Path filePath, BufferedImage image) throws IOException {
-        Path images = Paths.get("input");
-        if (!Files.exists(images)) {
-            Files.createDirectory(images);
-        }
-        for (File ignored : Objects.requireNonNull(images.toFile().listFiles())) {
-            System.out.println("output/" + filePath.getParent().toFile().getName() + "/" + filePath.toFile().getName());
-            File outputFile = new File("output/" + filePath.getParent().toFile().getName() + "/" + filePath.toFile().getName());
-            if (!outputFile.exists()) {
-                outputFile.getParentFile().mkdirs();
-                outputFile.createNewFile();
-            }
-            ImageIO.write(image, "png", outputFile);
-        }
+        return image;
     }
 }
